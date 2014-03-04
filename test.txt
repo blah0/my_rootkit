@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 this is in ubuntu.
+=======
+this is in windows 7
+>>>>>>> 3fa6a43404a62063d91b332e353c0021cc219117
