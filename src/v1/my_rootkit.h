@@ -6,7 +6,7 @@
 
 #ifdef DEBUG
 #ifdef __KERNEL__
-#define my_rootkit_debug(fmt, args...) printk(fmt, ##args)
+#define my_rootkit_debug(fmt, args...) printk(KERN_DEBUG fmt, ##args)
 #else
 //#define my_rootkit_debug(fmt, args...) fprintf(stderr, fmt, ##args)
 #endif
