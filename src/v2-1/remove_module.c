@@ -5,16 +5,18 @@
 #include <linux/string.h>
 #include <linux/moduleparam.h>
 
+#include "my_rootkit.h"
+
 #define DEBUG_REMOVE_MOD(ret, name) \
 	do {\
 		if (0 == (ret)) { \
-			printk(KERN_DEBUG "Remove module %s successfully.\n", (name)); \
+			my_rootkit_debug("Remove module %s successfully.\n", (name)); \
 		}\
 		else if (-1 == (ret)){\
-			printk(KERN_DEBUG "Cannot find module %s.\n", (name));\
+			my_rootkit_debug("Cannot find module %s.\n", (name));\
 		}\
 		else {\
-			printk(KERN_DEBUG "Error\n");\
+			my_rootkit_debug("Error\n");\
 		}\
 	}while(0)
 

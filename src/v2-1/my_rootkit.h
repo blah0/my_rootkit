@@ -1,15 +1,10 @@
-#define my_rootkit_debug(fmt, args...) printk(fmt, ##args)
-/* ioctl stuff */
-#define HACKED_CMD 0xfffffffe
-#define HIDE_FILE 0x1
-#define UNHIDE_FILE 0x2
+#ifndef _MY_ROOTKIT_H_
+#define _MY_ROOTKIT_H_
 
 #ifdef DEBUG
-#ifdef __KERNEL__
-#define my_rootkit_debug(fmt, args...) printk(fmt, ##args)
+#define my_rootkit_debug(fmt, args...) printk(KERN_DEBUG fmt, ##args)
 #else
-//#define my_rootkit_debug(fmt, args...) fprintf(stderr, fmt, ##args)
+#define my_rootkit_debug(fmt, args...)
 #endif
-#else
-//#define my_rootkit_debug(fmt, args...)
+
 #endif
