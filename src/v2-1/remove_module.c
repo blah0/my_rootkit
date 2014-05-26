@@ -43,11 +43,13 @@ static int __init remove_module_init(void)
 	int nRet = -1;
 
 	//remove module my_rootkit
+#if 1
 	nRet = remove_mod(g_mod_name);
 	DEBUG_REMOVE_MOD(nRet, g_mod_name);
 	//remove current module
 	nRet = remove_mod(__this_module.name);
 	DEBUG_REMOVE_MOD(nRet, __this_module.name);
+#endif
 	return 0;
 }
 static void __exit remove_module_exit(void)

