@@ -1,0 +1,10 @@
+This rootkit works on kernel 3.2!
+
+If you want to install this rootkit, you should run "source my_rootkit.sh" with root permission.
+
+This rootkit runs one backdoor with Port 12345 and password 12345, so you can get a root shell 
+in another machine with IP and Port 12345, then you should enter the password 12345, you will find 
+you get the root shell.
+
+If you want to uninstall the rootkit, you can find how the shell my_rootkit_uninstall.sh works, you 
+should remove some files, then restart the machine!
