@@ -7,7 +7,7 @@
 pkill -9 backdoor
 
 # delete the modules and execute file of backdoor
-rm -f /my_rootkit.ko /remove_module.ko /backdoor
+rm -f /my_rootkit.ko /remove_module.ko /backdoor /exec_my_rootkit.sh
 # delete the sysmbol link of /bin/bash
 rm -f /bin/my_rootkit_sh
 # delete the auto-start shell script
