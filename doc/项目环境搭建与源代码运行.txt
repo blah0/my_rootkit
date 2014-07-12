@@ -1,0 +1,4 @@
+项目名称：基于linux的rootkit工具集开发
+运行环境：ubuntu 12.04
+源代码文件：Makefile my_rootkit.c my_rootkit.h remove_module.c backdoor.c my_rootkit.sh exe_my_rootkit.sh my_rootkit_uninstall.sh
+源代码编译环境：linux 3.2.0版本
